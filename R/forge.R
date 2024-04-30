@@ -188,6 +188,13 @@ forge <- function(
       } else if (fam == 'unif') {
         psi[is.na(val), val := stats::runif(.N, min = min, max = max)]
       }
+      #Neu: Todo mit bedingung hie
+      #Todo wie fügt es sich dann zusammen? Muss man das noch ins dataframe hinzufügen? Unten 
+      # sind die conditions, wir dann richtig gefiltert?
+      #am besten nochmal einzeln ausgeben
+      
+      #psi[, mean(val), by = .(c_idx, variable)] #sollte denke für truncnorm und unif gehen, aber nur für truncnorm getestet.
+      
       NA_share_cnt <- psi[,.(idx, variable, NA_share)]
       synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
     }
