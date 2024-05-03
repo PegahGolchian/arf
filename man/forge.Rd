@@ -7,8 +7,8 @@
 forge(
   params,
   n_synth,
-  condition = NULL,
-  condition_row_mode = c("separate", "or"),
+  evidence = NULL,
+  evidence_row_mode = c("separate", "or"),
   sample_NAs = F,
   stepsize = 0,
   parallel = TRUE
@@ -19,14 +19,14 @@ forge(
 
 \item{n_synth}{Number of synthetic samples to generate.}
 
-\item{condition}{Optional set of conditioning events.}
+\item{evidence}{Optional set of conditioning events.}
 
-\item{condition_row_mode}{Interpretation of rows in multi-row conditions.}
+\item{evidence_row_mode}{Interpretation of rows in multi-row evidence.}
 
 \item{sample_NAs}{Sample NAs respecting the probability for missing values in the original data.}
 
-\item{stepsize}{Stepsize defining number of condition rows handled in one for each step.
-Defaults to nrow(condition)/num_registered_workers for parallel == TRUE.}
+\item{stepsize}{Stepsize defining number of evidence rows handled in one for each step.
+Defaults to nrow(evidence)/num_registered_workers for parallel == TRUE.}
 
 \item{parallel}{Compute in parallel? Must register backend beforehand, e.g.
 via \code{doParallel}.}
@@ -65,24 +65,16 @@ evi <- data.frame(Species = "setosa")
 x_synth <- forge(psi, n_synth = 100, evidence = evi)
 
 # Condition on Species = "setosa" and Sepal.Length > 6
-evi <- data.frame(variable = c("Species", "Sepal.Length"),
-                  relation = c("==", ">"), 
-                  value = c("setosa", 6))
+evi <- data.frame(Sepal.Length = "(6, Inf)", 
+                  Species = "setosa")
 x_synth <- forge(psi, n_synth = 100, evidence = evi)
 
 # Condition on first two data rows with some missing values
-condition <- iris[1:2,]
-condition[1,1] <- NA_real_
-condition[1,5] <- NA_character_
-condition[2,2] <- NA_real_
-x_synth <- forge(psi, n_synth = 1, condition = condition)
-
-# Or just input some distribution on leaves
-# (Weights that do not sum to unity are automatically scaled)
-n_leaves <- nrow(psi$forest)
-evi <- data.frame(f_idx = psi$forest$f_idx, wt = rexp(n_leaves))
-x_synth <- forge(psi, n_synth = 100, evidence = evi)
-
+evidence <- iris[1:2,]
+evidence[1,1] <- NA_real_
+evidence[1,5] <- NA_character_
+evidence[2,2] <- NA_real_
+x_synth <- forge(psi, n_synth = 1, evidence = evidence)
 
 }
 \references{
