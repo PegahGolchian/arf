@@ -28,8 +28,8 @@ cond_na <- dataset[!complete.cases(dataset), ]
 
 arf <- adversarial_rf( data_input, parallel= parallel)
 psi <- forde(arf, data_input, alpha=alpha, parallel= parallel)
-forge(psi, n_synth = 2, condition = cond_na)
-x_imputed <- forge(psi, n_synth = 2, condition = cond_na)#, stepsize = 4)
+forge(psi, n_synth = 2, evidence = cond_na)
+x_imputed <- forge(psi, n_synth = 2, evidence = cond_na)#, stepsize = 4)
 
 
 #chunks <- split(x_imputed, rep(1:ceiling(nrow(x_imputed)/2), each = 2, length.out = nrow(x_imputed)))
