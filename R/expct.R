@@ -65,17 +65,16 @@ expct <- function(
   
   # Prep evidence
   conj <- FALSE
-  if (!is.null(evidence)) {
-    evidence <- prep_evi(params, evidence)
-    if (!all(c('f_idx', 'wt') %in% colnames(evidence))) {
-      conj <- TRUE
-    }
-  } 
+  if (!is.null(evidence) && !(ncol(evidence) == 2 && all(c("f_idx", "wt") %in% colnames(evidence)))) {
+    evidence_variable <- arf:::prep_cond(evidence, params, "or")$variable
+    conj <- TRUE
+  }
+  
   
   # Check query
   if (is.null(query)) {
     if (isTRUE(conj)) {
-      query <- setdiff(params$meta$variable, evidence$variable)
+      query <- setdiff(params$meta$variable, evidence_variable)
     } else {
       query <- params$meta$variable
       if (!is.null(evidence)) {
@@ -97,7 +96,7 @@ expct <- function(
     omega[, wt := cvg / num_trees]
     omega[, cvg := NULL]
   } else if (conj) {
-    omega <- leaf_posterior(params, evidence)
+    omega <- cforde(params, evidence, "or")$forest[, .(f_idx = f_idx_uncond, wt = cvg)]
   } else {
     omega <- evidence
   }
