@@ -19,6 +19,9 @@ iris_na <- iris
 iris_na[1,1] <- NA
 iris_na[1,2] <- NA
 iris_na[2,1] <- NA
+iris_na[2,5] <- NA
+iris_na[50,5] <- NA
+iris_na[51,5] <- NA
 dataset <- iris_na
 
 data_input <-dataset[complete.cases(dataset), ]
@@ -28,8 +31,11 @@ cond_na <- dataset[!complete.cases(dataset), ]
 
 arf <- adversarial_rf( data_input, parallel= parallel)
 psi <- forde(arf, data_input, alpha=alpha, parallel= parallel)
-forge(psi, n_synth = 2, evidence = cond_na)
-x_imputed <- forge(psi, n_synth = 2, evidence = cond_na)#, stepsize = 4)
+#forge(psi, n_synth = 100, evidence = cond_na, multiple="mean_val_by_n_synth")
+x_imputed <- forge(psi, n_synth = 1, evidence = cond_na, multiple="no_mu")
+#forge(psi, n_synth = 2, evidence = cond_na)#, stepsize = 4)
+#TODO: später in impute sample_size -> n_synth in forge, aber in forge machen finde ich immernoch gut.
+
 
 
 #chunks <- split(x_imputed, rep(1:ceiling(nrow(x_imputed)/2), each = 2, length.out = nrow(x_imputed)))

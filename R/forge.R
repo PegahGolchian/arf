@@ -24,7 +24,7 @@
 #' \code{evidence = NULL}) or their posterior probability. Then, each feature is 
 #' sampled independently within each leaf according to the probability mass or 
 #' density function learned by \code{\link{forde}}. This will create realistic 
-#' data so long as the adversarial RF used in the previous step satisfies the 
+#' data as long as the adversarial RF used in the previous step satisfies the 
 #' local independence criterion. See Watson et al. (2023).
 #' 
 #' There are three methods for (optionally) encoding conditioning events via the 
@@ -95,10 +95,11 @@ forge <- function(
     params, 
     n_synth,
     evidence = NULL,
-    evidence_row_mode = c("separate", "or"),
+    evidence_row_mode = c("separate", "or"), #	Stilbruch, default nicht in Beschreibung, keine examples wie versprochen in der Doku
     sample_NAs = FALSE,
     stepsize = 0,
-    parallel = TRUE) {
+    parallel = TRUE,
+    multiple = "no") {
   
   evidence_row_mode <- match.arg(evidence_row_mode)
   
@@ -139,7 +140,7 @@ forge <- function(
   
   # Run in parallel for each step
   x_synth_ <- foreach(step_ = 1:step_no, .combine = "rbind") %dopar% {
-    
+    #browser()
     # Prepare the event space
     if (is.null(evidence) || ( ncol(evidence) == 2 && all(colnames(evidence) == c("f_idx", "wt")))) {
       cparams <- NULL
@@ -208,15 +209,24 @@ forge <- function(
       } else if (fam == 'unif') {
         psi[is.na(val), val := stats::runif(.N, min = min, max = max)]
       }
-      #Neu: Todo mit bedingung hie
-      #Todo wie fügt es sich dann zusammen? Muss man das noch ins dataframe hinzufügen? Unten 
-      # sind die conditions, wir dann richtig gefiltert?
-      #am besten nochmal einzeln ausgeben
-      
-      #psi[, mean(val), by = .(c_idx, variable)] #sollte denke für truncnorm und unif gehen, aber nur für truncnorm getestet.
-      
-      NA_share_cnt <- psi[,.(idx, variable, NA_share)]
-      synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
+      #psi[, mean(val), by = .(c_idx, variable)] #sollte denke für truncnorm und unif gehen, aber nur für truncnorm getestet. 
+      #TODO auch für die anderen cases reintun?? Nochmal Code checken!
+      NA_share_cnt <- psi[,.(idx, variable, NA_share)] #TODO: Was machen wir damit? Muss das hier auch zusammengefasst werden?
+      if(multiple== "no"){
+        #NA_share_cnt <- psi[,.(idx, variable, NA_share)]
+        synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
+      } else if(multiple== "no_mu"){
+        browser()
+        synth_cnt <- dcast(psi, idx ~ variable, value.var = 'mu')[, idx := NULL]
+      } 
+      else if(multiple == "mean_val_by_n_synth") {
+        browser()
+        psi_mean <- psi[, .(val_mean = mean(val)), by = .(c_idx, variable)]
+        synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'val_mean')[, c_idx := NULL]
+      } else if(multiple == "mean_mu_by_n_synth"){
+        psi_mean <- psi[, .(mu_mean = mean(mu)), by = .(c_idx, variable)]
+        synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'mu_mean')[, c_idx := NULL]
+      }
     }
     
     # Simulate categorical data
@@ -232,10 +242,19 @@ forge <- function(
         psi <- rbind(psi_cond, psi_uncond_relevant)
       }
       psi[prob < 1, val := sample(val, 1, prob = prob), by = .(variable, idx)]
-      
-      psi <- unique(psi[, .(idx, variable, val, NA_share)])
+      browser()
+      psi <- unique(psi[, .(c_idx,idx, variable, val, NA_share)]) #warum brauchen wir die Zeile überhaupt? Kann man die nicht löschen? Wird es interessant in nem anderen Fall??
+      #unique(psi[, .(idx, variable, val, NA_share)])#verschwindet der c_idx hier?
       NA_share_cat <- psi[,.(idx, variable, NA_share)]
       synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
+      if(multiple== "no" || multiple=="no_mu"){
+        browser()
+        synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
+      } else if(multiple == "mean_val_by_n_synth" || multiple == "mean_mu_by_n_synth") { #Oder kann man da auch was besseres machen für mu_mean?
+        browser()
+        psi_mode <-psi[, .(val_mode = Mode(val)), by = .(c_idx, variable)] #Mode hab ich in utils geschrieben
+        synth_cat <- dcast(psi_mode, c_idx ~ variable, value.var = 'val_mode')[, c_idx := NULL]
+      }
     }
     
     # Combine, optionally impose constraint(s)

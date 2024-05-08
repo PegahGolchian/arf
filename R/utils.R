@@ -692,3 +692,10 @@ prep_cond <- function(evidence, params, row_mode) {
   setorder(condition_long, c_idx)
   condition_long[]
 }
+
+#Claculate the Mode
+Mode <- function(x) {
+  x <- x[!is.na(x)]
+  ux <- unique(x)
+  ux[nnet::which.is.max(tabulate(match(x, ux)))]
+}
