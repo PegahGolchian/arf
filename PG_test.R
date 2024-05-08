@@ -30,7 +30,7 @@ iris_na[51,5] <- NA
 
 dataset <- iris_na
 
-data_input <-dataset#dataset[complete.cases(dataset), ]
+data_input <-dataset[complete.cases(dataset), ]
 
 cond <- which(!complete.cases(dataset))
 cond_na <- dataset[!complete.cases(dataset), ] 

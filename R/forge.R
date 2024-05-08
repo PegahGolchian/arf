@@ -222,8 +222,7 @@ forge <- function(
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       } else if(multiple== "no_mu"){
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'mu')[, idx := NULL]
-      } 
-      else if(multiple == "mean_val_by_n_synth") {
+      } else if(multiple == "mean_val_by_n_synth") {
         psi_mean <- psi[, .(val_mean = mean(val)), by = .(c_idx, variable)]
         synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'val_mean')[, c_idx := NULL]
       } else if(multiple == "mean_mu_by_n_synth"){
