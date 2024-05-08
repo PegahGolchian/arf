@@ -1,6 +1,9 @@
 # Try Sample several times and average
 # SScript for debugging to understand the code
 
+#devtools::install_github("imbs-hl/ranger", ref= "missing_values")
+library(ranger)
+
 #library("foreach")
 #library(dplyr)
 library(doParallel)
@@ -14,17 +17,20 @@ alpha= 1e-10
 par = 1
 feature_names <-colnames(iris)
 
-iris_na <- delete_MCAR(iris, 0.1, cols_mis =  feature_names )
 iris_na <- iris
+
+iris_na <- delete_MCAR(iris, 0.2, cols_mis =  feature_names )
+
 iris_na[1,1] <- NA
 iris_na[1,2] <- NA
 iris_na[2,1] <- NA
 iris_na[2,5] <- NA
 iris_na[50,5] <- NA
 iris_na[51,5] <- NA
+
 dataset <- iris_na
 
-data_input <-dataset[complete.cases(dataset), ]
+data_input <-dataset#dataset[complete.cases(dataset), ]
 
 cond <- which(!complete.cases(dataset))
 cond_na <- dataset[!complete.cases(dataset), ] 
@@ -32,7 +38,7 @@ cond_na <- dataset[!complete.cases(dataset), ]
 arf <- adversarial_rf( data_input, parallel= parallel)
 psi <- forde(arf, data_input, alpha=alpha, parallel= parallel)
 #forge(psi, n_synth = 100, evidence = cond_na, multiple="mean_val_by_n_synth")
-x_imputed <- forge(psi, n_synth = 1, evidence = cond_na, multiple="no_mu")
+x_imputed <- forge(psi, n_synth = 100, evidence = cond_na, multiple="mean_val_by_n_synth")#"no")
 #forge(psi, n_synth = 2, evidence = cond_na)#, stepsize = 4)
 #TODO: später in impute sample_size -> n_synth in forge, aber in forge machen finde ich immernoch gut.
 

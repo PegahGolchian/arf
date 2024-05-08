@@ -93,7 +93,7 @@
 
 forge <- function(
     params, 
-    n_synth,
+    n_synth, #TODO: maybe I should take another parameter when I use multiple.. Might be confusing for the users if the same parameter is used differently.
     evidence = NULL,
     evidence_row_mode = c("separate", "or"), #	Stilbruch, default nicht in Beschreibung, keine examples wie versprochen in der Doku
     sample_NAs = FALSE,
@@ -140,7 +140,6 @@ forge <- function(
   
   # Run in parallel for each step
   x_synth_ <- foreach(step_ = 1:step_no, .combine = "rbind") %dopar% {
-    #browser()
     # Prepare the event space
     if (is.null(evidence) || ( ncol(evidence) == 2 && all(colnames(evidence) == c("f_idx", "wt")))) {
       cparams <- NULL
@@ -216,11 +215,9 @@ forge <- function(
         #NA_share_cnt <- psi[,.(idx, variable, NA_share)]
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       } else if(multiple== "no_mu"){
-        browser()
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'mu')[, idx := NULL]
       } 
       else if(multiple == "mean_val_by_n_synth") {
-        browser()
         psi_mean <- psi[, .(val_mean = mean(val)), by = .(c_idx, variable)]
         synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'val_mean')[, c_idx := NULL]
       } else if(multiple == "mean_mu_by_n_synth"){
@@ -242,16 +239,13 @@ forge <- function(
         psi <- rbind(psi_cond, psi_uncond_relevant)
       }
       psi[prob < 1, val := sample(val, 1, prob = prob), by = .(variable, idx)]
-      browser()
       psi <- unique(psi[, .(c_idx,idx, variable, val, NA_share)]) #warum brauchen wir die Zeile überhaupt? Kann man die nicht löschen? Wird es interessant in nem anderen Fall??
       #unique(psi[, .(idx, variable, val, NA_share)])#verschwindet der c_idx hier?
       NA_share_cat <- psi[,.(idx, variable, NA_share)]
       synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       if(multiple== "no" || multiple=="no_mu"){
-        browser()
         synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       } else if(multiple == "mean_val_by_n_synth" || multiple == "mean_mu_by_n_synth") { #Oder kann man da auch was besseres machen für mu_mean?
-        browser()
         psi_mode <-psi[, .(val_mode = Mode(val)), by = .(c_idx, variable)] #Mode hab ich in utils geschrieben
         synth_cat <- dcast(psi_mode, c_idx ~ variable, value.var = 'val_mode')[, c_idx := NULL]
       }
@@ -268,6 +262,10 @@ forge <- function(
     
     if (sample_NAs) {
       setDT(x_synth)
+      #TODO: Gibt es mit den neuen Änderungen Probleme hier mit den Dimensionen? 
+      #Sollte es in Zeile 269.. müsste evtl schon vorher angepasst werden wenn NA_share_cnt erstellt wird.
+      #Kommt dieser Fall vor, wenn wie "multiple Imputation" Optionen haben? Wenn nicht,
+      # könnte man das ja auch gar nicht erst zulassen.
       NA_share <- rbind(NA_share_cnt, NA_share_cat)
       setorder(NA_share[,variable := factor(variable, levels = params$meta[,variable])], variable, idx)
       NA_share[,dat := rbinom(.N, 1, prob = NA_share)]
