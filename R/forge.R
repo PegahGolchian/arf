@@ -171,20 +171,25 @@ forge <- function(
     } 
     omega <- omega[wt > 0, ]
     
+    # Use random leaves if NA (no matching leaves found)
+    if (omega[, any(is.na(f_idx))]) {
+      row_idx <- sample(nrow(omega[!is.na(f_idx), ]), omega[, sum(is.na(f_idx))])
+      temp <- omega[!is.na(f_idx), ][row_idx, .(f_idx, f_idx_uncond)]
+      omega[is.na(f_idx), f_idx_uncond := temp[, f_idx_uncond]]
+      omega[is.na(f_idx), f_idx := temp[, f_idx]]
+    }
+    
+    
     # For each synthetic sample and condition, draw a leaf according to the leaf weights
     if (nrow(omega) == 1) {
       omega <- omega[rep(1, n_synth),][, idx := .I]
     } else {
-      if(evidence_row_mode == "or") {
+      if (evidence_row_mode == "or") {
         draws <- omega[, .(f_idx = sample(f_idx, size = n_synth, replace = TRUE, prob = wt))]
         omega <- merge(draws, omega, by = "f_idx", sort = FALSE)[, idx := .I]
       } else {
-        omega[, N := .N, by = c_idx]
-        draws <- setorder(rbind(
-          omega[N != 1, .(f_idx = sample(f_idx, size = n_synth, replace = TRUE, prob = wt)), by = c_idx],
-          omega[N == 1, .(f_idx, c_idx)]
-        ), c_idx)
-        omega <- merge(draws, omega[,-"N"], by = c("c_idx", "f_idx"), sort = FALSE)[, idx := .I]
+        draws <- omega[, .(f_idx = resample(f_idx, size = n_synth, replace = TRUE, prob = wt)), by = c_idx]
+        omega <- merge(draws, omega, by = c("c_idx", "f_idx"), sort = FALSE)[, idx := .I]
       }
       setcolorder(omega, "idx")
     }
@@ -205,6 +210,7 @@ forge <- function(
                     by = c("idx", "variable"))
       if (fam == 'truncnorm') {
         psi[is.na(val), val := truncnorm::rtruncnorm(.N, a = min, b = max, mean = mu, sd = sigma)]
+        psi[is.na(val), val := mu]
       } else if (fam == 'unif') {
         psi[is.na(val), val := stats::runif(.N, min = min, max = max)]
       }
@@ -273,15 +279,15 @@ forge <- function(
       x_synth <- post_x(x_synth, params)
     }
     
-    if (evidence_row_mode == "separate" & any(omega[, is.na(f_idx)])){
+    if (evidence_row_mode == "separate" & any(omega[, is.na(f_idx)])) {
       setDT(x_synth)
       indices_na <- cparams$forest[is.na(f_idx), c_idx]
       indices_sampled <- cparams$forest[!is.na(f_idx), unique(c_idx)]
       rows_na <- evidence_part[indices_na, ]
-      if (!all(factor_cols)){
-        rows_na <- rows_na[, (names(x_synth)[!factor_cols]) := lapply(.SD,as.numeric),.SDcols = !factor_cols]
+      if (!all(factor_cols)) {
+        rows_na <- rows_na[, (names(x_synth)[!factor_cols]) := lapply(.SD, as.numeric),.SDcols = !factor_cols]
       }
-      rows_na[, idx:= indices_na]
+      rows_na[, idx := indices_na]
       rows_na <- rbindlist(replicate(n_synth, rows_na, simplify = FALSE))
       x_synth[, idx := rep(indices_sampled, each = n_synth)]
       x_synth <- rbind(x_synth, rows_na)
