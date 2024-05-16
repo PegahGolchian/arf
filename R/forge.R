@@ -221,20 +221,16 @@ forge <- function(
         #NA_share_cnt <- psi[,.(idx, variable, NA_share)]
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       } else if(multiple== "no_mu"){
-        browser()
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'mu')[, idx := NULL]
       } else if(multiple== "no_med"){
-        browser()
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'med')[, idx := NULL]
       } else if(multiple == "mean_val_by_n_synth") {
         psi_mean <- psi[, .(val_mean = mean(val)), by = .(c_idx, variable)]
         synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'val_mean')[, c_idx := NULL]
       } else if(multiple == "mean_mu_by_n_synth"){
-        browser()
         psi_mean <- psi[, .(mu_mean = mean(mu)), by = .(c_idx, variable)]
         synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'mu_mean')[, c_idx := NULL]
       } else if(multiple == "mean_med_by_n_synth"){
-        browser()
         psi_mean <- psi[, .(med_mean = mean(med)), by = .(c_idx, variable)]
         synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'med_mean')[, c_idx := NULL]
       }
@@ -258,7 +254,6 @@ forge <- function(
       NA_share_cat <- psi[,.(idx, variable, NA_share)]
       synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       if(multiple== "no" || multiple=="no_mu"  || multiple=="no_med"){
-        browser()
         synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       } else if(multiple == "mean_val_by_n_synth" || multiple == "mean_mu_by_n_synth" || multiple == "mean_med_by_n_synth") { #Oder kann man da auch was besseres machen für mu_mean?
         psi_mode <-psi[, .(val_mode = Mode(val)), by = .(c_idx, variable)] #Mode hab ich in utils geschrieben
