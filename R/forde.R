@@ -244,13 +244,13 @@ forde <- function(
                                                                       NULL, NULL, NULL)]
       }
       if (family == 'truncnorm') {
-        dt[, c('mu', 'sigma', 'NA_share') := .(mean(value, na.rm = T), sd(value, na.rm = T), sum(is.na(value))/.N),
+        dt[, c('mu','med', 'sigma', 'NA_share') := .(mean(value, na.rm = T), median(value, na.rm = T), sd(value, na.rm = T), sum(is.na(value))/.N),
            by = .(leaf, variable)]
-        dt[, c('min_emp', 'max_emp') := .(min(value, na.rm = T), max(value, na.rm = T)), by = variable]
+        dt[, c('min_emp', 'max_emp') := .(min(value, na.rm = T), max(value, na.rm = T)), by = variable] # PG: Do we have to consider the case, when the value only has NAs? Can this happen?
         dt[NA_share == 1, c('min', 'max') := .(fifelse(is.infinite(min), min_emp, min),
-                                               fifelse(is.infinite(max), max_emp, max))]
+                                               fifelse(is.infinite(max), max_emp, max))] #PG: Does it also work if all is NA except 1 value?
         dt[, c("min_emp", "max_emp") := NULL]
-        dt[NA_share == 1, mu := (max - min) / 2]
+        dt[NA_share == 1, c('mu', 'med') := .((max - min) / 2, (max - min) / 2)]
         dt[is.na(sigma), sigma := 0]
         if (any(dt[, sigma == 0])) {
           dt[, new_min := fifelse(!is.finite(min), min(value, na.rm = TRUE), min), by = variable]
@@ -281,7 +281,7 @@ forde <- function(
     setcolorder(psi_cnt, c('f_idx', 'variable'))
   } else {
     psi_cnt <- data.table(f_idx = integer(), variable = character(), min = numeric(), max = numeric(), 
-                          mu = numeric(), sigma = numeric(), NA_share = numeric())
+                          mu = numeric(), med = numeric(), sigma = numeric(), NA_share = numeric())
   }
   
   # Categorical case

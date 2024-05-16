@@ -104,7 +104,7 @@ forge <- function(
   evidence_row_mode <- match.arg(evidence_row_mode)
   
   # To avoid data.table check issues
-  tree <- cvg <- leaf <- idx <- family <- mu <- sigma <- prob <- dat <- 
+  tree <- cvg <- leaf <- idx <- family <- mu <- med <- sigma <- prob <- dat <- 
     variable <- relation <- wt <- j <- f_idx <- val <- . <- step_ <- c_idx <-
     f_idx_uncond <- N <- NULL
   
@@ -210,7 +210,7 @@ forge <- function(
                     by = c("idx", "variable"))
       if (fam == 'truncnorm') {
         psi[is.na(val), val := truncnorm::rtruncnorm(.N, a = min, b = max, mean = mu, sd = sigma)]
-        psi[is.na(val), val := mu]
+        psi[is.na(val), val := mu] #PG: here mu behalten und nicht mef probieren.
       } else if (fam == 'unif') {
         psi[is.na(val), val := stats::runif(.N, min = min, max = max)]
       }
@@ -221,13 +221,22 @@ forge <- function(
         #NA_share_cnt <- psi[,.(idx, variable, NA_share)]
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       } else if(multiple== "no_mu"){
+        browser()
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'mu')[, idx := NULL]
+      } else if(multiple== "no_med"){
+        browser()
+        synth_cnt <- dcast(psi, idx ~ variable, value.var = 'med')[, idx := NULL]
       } else if(multiple == "mean_val_by_n_synth") {
         psi_mean <- psi[, .(val_mean = mean(val)), by = .(c_idx, variable)]
         synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'val_mean')[, c_idx := NULL]
       } else if(multiple == "mean_mu_by_n_synth"){
+        browser()
         psi_mean <- psi[, .(mu_mean = mean(mu)), by = .(c_idx, variable)]
         synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'mu_mean')[, c_idx := NULL]
+      } else if(multiple == "mean_med_by_n_synth"){
+        browser()
+        psi_mean <- psi[, .(med_mean = mean(med)), by = .(c_idx, variable)]
+        synth_cnt <- dcast(psi_mean, c_idx ~ variable, value.var = 'med_mean')[, c_idx := NULL]
       }
     }
     
@@ -248,9 +257,10 @@ forge <- function(
       #unique(psi[, .(idx, variable, val, NA_share)])#verschwindet der c_idx hier?
       NA_share_cat <- psi[,.(idx, variable, NA_share)]
       synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
-      if(multiple== "no" || multiple=="no_mu"){
+      if(multiple== "no" || multiple=="no_mu"  || multiple=="no_med"){
+        browser()
         synth_cat <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
-      } else if(multiple == "mean_val_by_n_synth" || multiple == "mean_mu_by_n_synth") { #Oder kann man da auch was besseres machen für mu_mean?
+      } else if(multiple == "mean_val_by_n_synth" || multiple == "mean_mu_by_n_synth" || multiple == "mean_med_by_n_synth") { #Oder kann man da auch was besseres machen für mu_mean?
         psi_mode <-psi[, .(val_mode = Mode(val)), by = .(c_idx, variable)] #Mode hab ich in utils geschrieben
         synth_cat <- dcast(psi_mode, c_idx ~ variable, value.var = 'val_mode')[, c_idx := NULL]
       }
