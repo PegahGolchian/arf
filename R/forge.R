@@ -209,8 +209,9 @@ forge <- function(
                                 sort = FALSE, allow.cartesian = TRUE)[,val := NA_real_]), 
                     by = c("idx", "variable"))
       if (fam == 'truncnorm') {
+        #TODO: Schöner machen: Die Zeile in "no" und für die anderen Fälle auch mit psi[is.na(val), val := ?] #Hier dann rausnehmen
         psi[is.na(val), val := truncnorm::rtruncnorm(.N, a = min, b = max, mean = mu, sd = sigma)]
-        psi[is.na(val), val := mu] #PG: here mu behalten und nicht mef probieren.
+        psi[is.na(val), val := mu]
       } else if (fam == 'unif') {
         psi[is.na(val), val := stats::runif(.N, min = min, max = max)]
       }
@@ -218,9 +219,14 @@ forge <- function(
       #TODO auch für die anderen cases reintun?? Nochmal Code checken!
       NA_share_cnt <- psi[,.(idx, variable, NA_share)] #TODO: Was machen wir damit? Muss das hier auch zusammengefasst werden?
       if(multiple== "no"){
+        #psi[is.na(val), val := truncnorm::rtruncnorm(.N, a = min, b = max, mean = mu, sd = sigma)]
+        #psi[is.na(val), val := mu]
+        
         #NA_share_cnt <- psi[,.(idx, variable, NA_share)]
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'val')[, idx := NULL]
       } else if(multiple== "no_mu"){
+        #only fill in the missing values with the mean
+        #psi[is.na(val), val := mu] #so? Prüfen
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'mu')[, idx := NULL]
       } else if(multiple== "no_med"){
         synth_cnt <- dcast(psi, idx ~ variable, value.var = 'med')[, idx := NULL]
