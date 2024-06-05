@@ -142,12 +142,8 @@ forge <- function(
   } 
   
   # Run in parallel for each step
-<<<<<<< HEAD
-  x_synth_ <- foreach(step_ = 1:step_no, .combine = "rbind") %dopar% {
-=======
   par_fun <- function(step_) {
-    
->>>>>>> upstream/main
+
     # Prepare the event space
     if (is.null(evidence) || ( ncol(evidence) == 2 && all(colnames(evidence) == c("f_idx", "wt")))) {
       cparams <- NULL
