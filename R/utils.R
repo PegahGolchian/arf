@@ -1,18 +1,18 @@
 #' Adaptive column renaming
 #' 
-#' This function renames columns in case the input data.frame includes any
+#' This function renames columns in case the input colnames includes any
 #' colnames required by internal functions (e.g., \code{"y"}).
 #' 
-#' @param df Input data.frame.
+#' @param cn Column names.
 #' @param old_name Name of column to be renamed.
-#' 
+#' @keywords internal
 
-col_rename <- function(df, old_name) {
+col_rename <- function(cn, old_name) {
   k <- 1L
   converged <- FALSE
   while (!isTRUE(converged)) {
     new_name <- paste0(old_name, k)
-    if (!new_name %in% colnames(df)) {
+    if (!new_name %in% cn) {
       converged <- TRUE
     } else {
       k <- k + 1L
@@ -21,15 +21,60 @@ col_rename <- function(df, old_name) {
   return(new_name)
 }
 
+#' Rename all problematic columns with col_rename().
+#'
+#' @param cn Old column names.
+#'
+#' @return New columns names.
+#' @keywords internal
+
+col_rename_all <- function(cn) {
+
+  if ('y' %in% cn) {
+    cn[which(cn == 'y')] <- col_rename(cn, 'y')
+  }
+  if ('obs' %in% cn) {
+    cn[which(cn == 'obs')] <- col_rename(cn, 'obs')
+  }
+  if ('tree' %in% cn) {
+    cn[which(cn == 'tree')] <- col_rename(cn, 'tree')
+  }
+  if ('leaf' %in% cn) {
+    cn[which(cn == 'leaf')] <- col_rename(cn, 'leaf')
+  }
+  if ('cnt' %in% cn) {
+    cn[which(cn == 'cnt')] <- col_rename(cn, 'cnt')
+  }
+  if ('N' %in% cn) {
+    cn[which(cn == 'N')] <- col_rename(cn, 'N')
+  }
+  cn
+}
+
 #' Safer version of sample()
 #'
 #' @param x A vector of one or more elements from which to choose.
 #' @param ... Further arguments for sample().
 #'
 #' @return A vector of length size with elements drawn from x.
+#' @keywords internal
 
 resample <- function(x, ...) {
   x[sample.int(length(x), ...)]
+}
+
+#' which.max() with random at ties
+#'
+#' @param x A numeric vector.
+#'
+#' @return Index of maximum value in x, with random tie-breaking.
+#' @keywords internal
+
+which.max.random <- function(x) {
+  if (all(is.na(x))) {
+    return(NA)
+  }
+  which(rank(x, ties.method = "random", na.last = FALSE) == length(x))
 }
 
 #' Preprocess input data
@@ -37,7 +82,7 @@ resample <- function(x, ...) {
 #' This function prepares input data for ARFs.
 #' 
 #' @param x Input data.frame.
-#' 
+#' @keywords internal
 
 prep_x <- function(x) {
   # Reclass all non-numeric features as factors
@@ -74,24 +119,7 @@ prep_x <- function(x) {
     }
   }
   # Rename annoying columns
-  if ('y' %in% colnames(x)) {
-    colnames(x)[which(colnames(x) == 'y')] <- col_rename(x, 'y')
-  }
-  if ('obs' %in% colnames(x)) {
-    colnames(x)[which(colnames(x) == 'obs')] <- col_rename(x, 'obs')
-  }
-  if ('tree' %in% colnames(x)) {
-    colnames(x)[which(colnames(x) == 'tree')] <- col_rename(x, 'tree')
-  } 
-  if ('leaf' %in% colnames(x)) {
-    colnames(x)[which(colnames(x) == 'leaf')] <- col_rename(x, 'leaf')
-  }
-  if ('cnt' %in% colnames(x)) {
-    colnames(x)[which(colnames(x) == 'cnt')] <- col_rename(x, 'cnt')
-  }
-  if ('N' %in% colnames(x)) {
-    colnames(x)[which(colnames(x) == 'N')] <- col_rename(x, 'N')
-  }
+  colnames(x) <- col_rename_all(colnames(x))
   return(x)
 }
 
@@ -104,7 +132,7 @@ prep_x <- function(x) {
 #' @param params Circuit parameters learned via \code{\link{forde}}.
 #' 
 #' @import data.table
-#'
+#' @keywords internal
 
 post_x <- function(x, params) {
   
@@ -179,7 +207,7 @@ post_x <- function(x, params) {
 #' @importFrom foreach foreach %dopar%
 #' @importFrom truncnorm dtruncnorm ptruncnorm 
 #' @importFrom stats dunif punif
-#' 
+#' @keywords internal
 
 cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 0, parallel = TRUE) {
   
@@ -188,7 +216,7 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
   # To avoid data.table check issues
   . <- c_idx <- cvg <- cvg_arf <- cvg_factor <- f_idx <- f_idx_uncond <- i.max <-
     i.min <- leaf <- max.x <- max.y <- min.x <- min.y <- mu <- prob <- sigma <-
-    step_ <-	tree <-	V1 <- val <- variable <- leaf_zero_lik <- NULL
+    step_ <-	tree <-	V1 <- val <- variable <- leaf_zero_lik <- step <- NULL
   
   # Store informations of params as variables
   meta <- params$meta
@@ -210,9 +238,9 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
   
   # Store number of evidence rows and number of evidence rows that do not consist of NA only
   if (row_mode == "or") {
-    nconds <- nconds_conditioned <- condition_long[,max(c_idx)]
+    nconds <- nconds_conditioned <- condition_long[, max(c_idx)]
   } else {
-    nconds <- nrow(evidence)
+    nconds <- condition_long[, max(c_idx)]
     nconds_conditioned <- condition_long[,uniqueN(c_idx)]
   }
   
@@ -230,7 +258,7 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
   step_no <- ceiling(nconds_conditioned/stepsize)
   
   # Loop through conditions with defined stepsize to determined matching leaves and updates for cat and cnt params
-  updates_relevant_leaves <- foreach(step_ = 1:step_no, .combine = "rbind") %dopar% {
+  update_fun <-function(step_) {
     
     # Define subset of conditions for step_
     index_start <- conds_conditioned[(step_ - 1)*stepsize + 1]
@@ -252,7 +280,9 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
       setkey(cat_relevant, c_idx)
       
       # or-combine different conditions on the same feature
-      cat_relevant <- cat_relevant[, .(.(Reduce(union, V1))), by = .(c_idx, variable)]
+      if (uniqueN(cat_relevant, by = c("c_idx", "variable")) != nrow(cat_relevant)) {
+        cat_relevant <- cat_relevant[, .(.(Reduce(union, V1))), by = .(c_idx, variable)]
+      }
       
       # Determine matching leaves for cat conditions
       relevant_leaves_changed_cat <- cat_relevant[, Reduce(intersect, V1), by = c_idx][, .(c_idx, f_idx = V1)]
@@ -282,25 +312,33 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
         cnt_relevant[, f_idx := NA]
       }
       
-      # Determine matching leaves for cnt conditions
-      relevant_leaves_changed_cnt <- cnt_relevant[, .(
+      # Determine matching leaves for cnt conditions per row
+      cnt_relevant <- cnt_relevant[, .(
         c_idx,
         variable,
         f_idx = Map(\(f_idx, min, max, i.min, i.max) {
           if (!inherits(f_idx, "logical")) {
-            rel_cat_min <- i.min[f_idx]
-            rel_cat_max <- i.max[f_idx]
-            rel_min <- f_idx[which(max > rel_cat_min)]
-            rel_max <- f_idx[which(min <= rel_cat_max)]
+            rel_cnt_min <- i.min[f_idx]
+            rel_cnt_max <- i.max[f_idx]
+            rel_min <- f_idx[which(max > rel_cnt_min)]
+            rel_max <- f_idx[which(min <= rel_cnt_max)]
           } else {
-            rel_cat_min <- i.min
-            rel_cat_max <- i.max
-            rel_min <- which(max > rel_cat_min)
-            rel_max <- which(min <= rel_cat_max)
+            rel_cnt_min <- i.min
+            rel_cnt_max <- i.max
+            rel_min <- which(max > rel_cnt_min)
+            rel_max <- which(min <= rel_cnt_max)
           }
           intersect(rel_min,rel_max) 
-        }, f_idx = f_idx, min = min, max = max, i.min = i.min, i.max = i.max))
-                                                 ][, Reduce(intersect,f_idx),by = c_idx][,.(c_idx, f_idx = V1)]
+        }, f_idx = f_idx, min = min, max = max, i.min = i.min, i.max = i.max))]
+      
+      # or-combine different conditions on the same feature
+      or_within_row_cnt <- uniqueN(cnt_relevant, by = c("c_idx", "variable")) != nrow(cnt_relevant)
+      if (or_within_row_cnt) {
+        cnt_relevant <- cnt_relevant[, .(f_idx = .(Reduce(union, f_idx))), by = .(c_idx, variable)]
+      }
+      
+      # Determine matching leaves for cnt conditions
+      relevant_leaves_changed_cnt <- cnt_relevant[, Reduce(intersect, f_idx),by = c_idx][,.(c_idx, f_idx = V1)]
       conditions_unchanged_cnt <- setdiff(condition_long_step[, c_idx], cnt_conds[, c_idx])
       relevant_leaves_unchanged_cnt <- data.table(c_idx = rep(conditions_unchanged_cnt, each = nrow(forest)), f_idx = rep(forest[,f_idx],length(conditions_unchanged_cnt)))
       relevant_leaves_cnt <- rbind(relevant_leaves_changed_cnt, relevant_leaves_unchanged_cnt)
@@ -311,17 +349,26 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
                                 max = max.y)]
       cnt_new[is.na(val),`:=` (min = pmax(min.x, min.y, na.rm = T),
                                max = pmin(max.x, max.y, na.rm = T))]
-      cnt_new[, cvg_factor := NA_real_]
+      cnt_new <- cnt_new[min <= max & sum(max.x, val, na.rm = T) != min.y, ]
+      cnt_new[, prob := NA_real_]
       if (family == "truncnorm") {
-        cnt_new[!is.na(val), cvg_factor := dtruncnorm(val, a=min.y, b=max.y, mean=mu, sd=sigma)*(val != min.y)]
-        cnt_new[is.na(val) & (min == min.y) & (max == max.y), cvg_factor := 1]
-        cnt_new[is.na(val) & is.na(cvg_factor), cvg_factor := ptruncnorm(max, a=min.y, b=max.y, mean=mu, sd=sigma) - ptruncnorm(min, a=min.y, max.y, mean=mu,sd=sigma)] 
+        cnt_new[!is.na(val), prob := dtruncnorm(val, a=min.y, b=max.y, mean=mu, sd=sigma)*(val != min.y)]
+        cnt_new[is.na(val) & (min == min.y) & (max == max.y), prob := 1]
+        cnt_new[is.na(val) & is.na(prob), prob := ptruncnorm(max, a=min.y, b=max.y, mean=mu, sd=sigma) - ptruncnorm(min, a=min.y, max.y, mean=mu,sd=sigma)] 
       } else if (family == "unif") {
-        cnt_new[!is.na(val), cvg_factor := dunif(val, min=min.y, max=max.y)*(val != min.y)]
-        cnt_new[is.na(val) & (min == min.y) & (max == max.y), cvg_factor := 1]
-        cnt_new[is.na(val) & is.na(cvg_factor), cvg_factor := punif(max, min=min.y, max=max.y) - punif(min, min=min.y, max.y)]  
+        cnt_new[!is.na(val), prob := dunif(val, min=min.y, max=max.y)*(val != min.y)]
+        cnt_new[is.na(val) & (min == min.y) & (max == max.y), prob := 1]
+        cnt_new[is.na(val) & is.na(prob), prob := punif(max, min=min.y, max=max.y) - punif(min, min=min.y, max.y)]  
       }
       cnt_new[, c("min.x","max.x","min.y","max.y") := NULL]
+      
+      # If or-combined cnt condition within rows exist, calculate likelihoods for ranges within leaves and norm to 1
+      if (or_within_row_cnt) {
+        cnt_new[, cvg_factor := sum(prob), by = .(f_idx, c_idx, variable)]
+        cnt_new[, prob := prob/cvg_factor]
+      } else {
+        cnt_new[, `:=` (cvg_factor = prob, prob = 1)]
+      }
       
       # Calculate final set of matching leaves
       if (nrow(cat_conds) > 0) {
@@ -333,17 +380,22 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
       # If no cnt conditions exist, output empty update table cnt_new for cnt params
     } else {
       relevant_leaves <- relevant_leaves_cat[,.(c_idx, f_idx)]
-      cnt_new <- cbind(cnt[F,], data.table(cvg_factor = numeric(), c_idx = integer(), val = numeric()))
+      cnt_new <- cbind(cnt[F,], data.table(cvg_factor = numeric(), c_idx = integer(), val = numeric(), prob = numeric()))
     }
     
     # Calculate updates for cat params matching cat conditions
     cat_new <- merge(merge(relevant_leaves, cat_conds, by = "c_idx", allow.cartesian = T), cat, by = c("f_idx","variable", "val")) 
 
     # Ensure probabilities sum to 1
-    cat_new[, cvg_factor := prob]
-    cat_new[, prob := prob/sum(prob), by = .(f_idx, variable)]
+    cat_new[, cvg_factor := sum(prob), by = .(f_idx, c_idx, variable)]
+    cat_new[, prob := prob/cvg_factor]
     
     list(cnt_new = cnt_new, cat_new = cat_new, relevant_leaves = relevant_leaves)
+  }
+  if (isTRUE(parallel)) {
+    updates_relevant_leaves <- foreach(step = 1:step_no, .combine = "rbind") %dopar% update_fun(step)
+  } else {
+    updates_relevant_leaves <- foreach(step = 1:step_no, .combine = "rbind") %do% update_fun(step)
   }
   
   # Combine results
@@ -371,13 +423,15 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
   forest_new <- merge(relevant_leaves, forest, by.x = "f_idx_uncond", by.y = "f_idx", all.x = T, sort = F)
   setnames(forest_new, "cvg", "cvg_arf")
   
-  cvg_new <- rbind(cat_new[, .(f_idx, c_idx, cvg_factor)], cnt_new[, .(f_idx, c_idx, cvg_factor)])
+  cvg_new <- unique(rbind(cat_new[, .(f_idx, c_idx, variable, cvg_factor)],
+               cnt_new[, .(f_idx, c_idx, variable, cvg_factor)]),
+         by = c("f_idx", "variable"))[,-"variable"]
   
   if (nrow(cvg_new) > 0) {
     # Use log transformation to avoid overflow
     cvg_new[, cvg_factor := log(cvg_factor)]
     cvg_new <- cvg_new[, .(cvg_factor = sum(cvg_factor)), keyby = f_idx]
-    cvg_new <- merge(cvg_new, forest_new[, .(f_idx, c_idx, cvg_arf = log(cvg_arf))], by = f_idx)
+    cvg_new <- cbind(cvg_new, forest_new[!is.na(cvg_arf), .(c_idx, cvg_arf = log(cvg_arf))])
     cvg_new[,`:=` (cvg = cvg_factor + cvg_arf, cvg_factor = NULL, cvg_arf = NULL)]
     
     # Re-calculate weights and transform back from log scale, handle (numerically) impossible cases
@@ -443,12 +497,17 @@ cforde <- function(params, evidence, row_mode = c("separate", "or"), stepsize = 
 #' 
 #' @import data.table
 #' @import stringr
-#' 
+#' @keywords internal
 
 prep_cond <- function(evidence, params, row_mode) {
   
   # To avoid data.table check issues
-  c_idx <- family <- val <- variable <- val._x <- NULL
+  c_idx <- family <- val <- variable <- val._x <- . <- NULL
+  
+  # If condition already in correct long format, do nothing
+  if(ncol(evidence) == 5 && all(names(evidence) == c("c_idx", "variable", "min", "max", "val"))) {
+    return(evidence)
+  }
   
   n_row_cond <- nrow(evidence)
   meta <- params$meta
@@ -464,28 +523,10 @@ prep_cond <- function(evidence, params, row_mode) {
   
   cols_check_range <- cond[,sapply(.SD, \(x) sum((str_sub(x,,1) == "(") | is.na(x))), .SDcols = cnt_cols]
   cols_check_or <- cond[,sapply(.SD, \(x) sum(str_detect(x, "\\|")))]
+  
   if (row_mode == "or") {
     if (any(cols_check_range > 0 & cols_check_range < nrow(cond))){
       stop("Condition vector contains columns with both range and scalar entries. No valid conditional density can be calculated.")
-    }
-    if (length(cnt_cols) > 0 & n_row_cond > 1) {
-      cond[,(cnt_cols) := lapply(.SD,\(col) replace(col, which(is.na(col)), "(-Inf,Inf)")),.SDcols = cnt_cols]
-    }
-    if (length(cat_cols) > 0 & n_row_cond > 1) {
-      cond[,(cat_cols) := mapply(\(colname,col) {
-        lvls_str <- paste(levels(as.factor(cat[cat$variable == colname]$val)),collapse="|")
-        list(replace(col,which(is.na(col)),lvls_str))
-      },colname = colnames(.SD),
-      col = .SD),
-      .SDcols = cat_cols]
-    }
-    cond <- apply(cond,1,str_split,"\\|")
-    cond <- rbindlist(lapply(cond,expand.grid))
-    cond <- unique(cond)
-    names(cond) <- names(evidence)
-  } else if (row_mode == "separate") {
-    if (any(cols_check_or > 0, na.rm = TRUE)) {
-      stop("Please use the option row_mode = 'or' when including logical disjunctions.")
     }
   }
   
@@ -495,8 +536,9 @@ prep_cond <- function(evidence, params, row_mode) {
     condition_long <- melt(cond,id.vars = "c_idx", value.name = "val")[!is.na(val),]
   )
   
-  if (row_mode == "or") {
-    condition_long[,c_idx:= .GRP, by = c_idx]
+  # handle logical or within rows
+  if (any(cols_check_or > 0, na.rm = TRUE)) {
+    condition_long <- condition_long[, .(val = unlist(str_split(val,"\\|"))), by = .(c_idx, variable)]
   }
   
   # Logical not

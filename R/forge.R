@@ -47,8 +47,11 @@
 #'
 #'
 #' @examples
+#' # Train ARF and estimate leaf parameters
 #' arf <- adversarial_rf(iris)
 #' psi <- forde(arf, iris)
+#' 
+#' # Generate 100 synthetic samples from the iris dataset
 #' x_synth <- forge(psi, n_synth = 100)
 #'
 #' # Condition on Species = "setosa"
@@ -82,7 +85,7 @@
 #' x_synth <- forge(psi, n_synth = 100, evidence = evi)
 #'
 #' @seealso
-#' \code{\link{adversarial_rf}}, \code{\link{forde}}
+#' \code{\link{arf}}, \code{\link{adversarial_rf}}, \code{\link{forde}}, \code{\link{expct}}, \code{\link{lik}}
 #' 
 #' @export
 #' @import data.table
@@ -106,7 +109,7 @@ forge <- function(
   # To avoid data.table check issues
   tree <- cvg <- leaf <- idx <- family <- mu <- med <- sigma <- prob <- dat <- 
     variable <- relation <- wt <- j <- f_idx <- val <- . <- step_ <- c_idx <-
-    f_idx_uncond <- N <- NULL
+    f_idx_uncond <- N <- step <- V1 <- NULL
   
   factor_cols <- params$meta[, family == 'multinom']
   
@@ -115,31 +118,36 @@ forge <- function(
     step_no <- 1
   } else {
     evidence <- as.data.table(evidence)
-    if (ncol(evidence) == 2 && all(colnames(evidence) == c("f_idx", "wt"))) {
-      stepsize <- nrow(evidence)
-      step_no <- 1
-    } else if (parallel & evidence_row_mode == "separate") {
-      # For "separate", parallelize in forge (not in cforde)
-      if (stepsize == 0) {
+    if (stepsize == 0) {
+      if (parallel) {
         stepsize <- ceiling(nrow(evidence)/foreach::getDoParWorkers())
-      }
-      stepsize_cforde <- 0
-      parallel_cforde = FALSE
-      step_no <- ceiling(nrow(evidence)/stepsize)
-    } else {
-      # For "or", parallelize in cforde (not in forge)
-      if (stepsize == 0) {
+      } else {
         stepsize <- nrow(evidence)
       }
-      stepsize_cforde <- stepsize
-      parallel_cforde <- parallel
-      stepsize <- nrow(evidence)
-      step_no <- 1
     }
+    if (ncol(evidence) == 2 && all(colnames(evidence) == c("f_idx", "wt"))) {
+      stepsize <- nrow(evidence)
+    } else if (evidence_row_mode == "separate") {
+      # For "separate", parallelize in forge (not in cforde)
+      stepsize_cforde <- 0
+      parallel_cforde = FALSE
+    } else {
+      # For "or", parallelize in cforde (not in forge)
+      parallel_cforde <- parallel
+      stepsize_cforde <- stepsize
+      parallel <- FALSE
+      stepsize <- nrow(evidence)
+    }
+    step_no <- ceiling(nrow(evidence)/stepsize)
   } 
   
   # Run in parallel for each step
+<<<<<<< HEAD
   x_synth_ <- foreach(step_ = 1:step_no, .combine = "rbind") %dopar% {
+=======
+  par_fun <- function(step_) {
+    
+>>>>>>> upstream/main
     # Prepare the event space
     if (is.null(evidence) || ( ncol(evidence) == 2 && all(colnames(evidence) == c("f_idx", "wt")))) {
       cparams <- NULL
@@ -172,8 +180,8 @@ forge <- function(
     omega <- omega[wt > 0, ]
     
     # Use random leaves if NA (no matching leaves found)
-    if (omega[, any(is.na(f_idx))]) {
-      row_idx <- sample(nrow(omega[!is.na(f_idx), ]), omega[, sum(is.na(f_idx))])
+    if (omega[, any(is.na(f_idx))] & omega[, any(!is.na(f_idx))]) {
+      row_idx <- sample(nrow(omega[!is.na(f_idx), ]), omega[, sum(is.na(f_idx))], replace = TRUE)
       temp <- omega[!is.na(f_idx), ][row_idx, .(f_idx, f_idx_uncond)]
       omega[is.na(f_idx), f_idx_uncond := temp[, f_idx_uncond]]
       omega[is.na(f_idx), f_idx := temp[, f_idx]]
@@ -185,7 +193,7 @@ forge <- function(
       omega <- omega[rep(1, n_synth),][, idx := .I]
     } else {
       if (evidence_row_mode == "or") {
-        draws <- omega[, .(f_idx = sample(f_idx, size = n_synth, replace = TRUE, prob = wt))]
+        draws <- omega[, .(f_idx = resample(f_idx, size = n_synth, replace = TRUE, prob = wt))]
         omega <- merge(draws, omega, by = "f_idx", sort = FALSE)[, idx := .I]
       } else {
         draws <- omega[, .(f_idx = resample(f_idx, size = n_synth, replace = TRUE, prob = wt)), by = c_idx]
@@ -202,7 +210,14 @@ forge <- function(
         psi_cond <- data.table()
       } else {
         psi_cond <- merge(omega, cparams$cnt[,-c("cvg_factor", "f_idx_uncond")], by = c('c_idx', 'f_idx'), 
-                          sort = FALSE, allow.cartesian = TRUE)
+                          sort = FALSE, allow.cartesian = TRUE)[prob > 0,]
+        # draw sub-leaf areas (resulting from within-row or-conditions)
+        if(any(psi_cond[,prob != 1])) {
+          psi_cond[, I := .I]
+          psi_cond <- psi_cond[sort(c(psi_cond[prob == 1, I],
+                          psi_cond[prob > 0 & prob < 1, fifelse(.N > 1, resample(I, 1, prob = prob), 0), by = .(variable, idx)][,V1])), -"I"]
+        }
+        psi_cond[, prob := NULL]
       } 
       psi <- unique(rbind(psi_cond,
                           merge(omega, params$cnt, by.x = 'f_idx_uncond', by.y = 'f_idx',
@@ -293,18 +308,24 @@ forge <- function(
       setDT(x_synth)
       indices_na <- cparams$forest[is.na(f_idx), c_idx]
       indices_sampled <- cparams$forest[!is.na(f_idx), unique(c_idx)]
-      rows_na <- evidence_part[indices_na, ]
-      if (!all(factor_cols)) {
-        rows_na <- rows_na[, (names(x_synth)[!factor_cols]) := lapply(.SD, as.numeric),.SDcols = !factor_cols]
-      }
+      evidence_part_long <- dcast(rbind(data.table(c_idx = 0, variable = params$meta[,variable]),
+                                        cparams$evidence_prepped,
+                                        fill = T),
+                                  c_idx ~ variable, value.var = "val")[c_idx != 0,-"c_idx"]
+      rows_na <- evidence_part_long[indices_na, ]
       rows_na[, idx := indices_na]
       rows_na <- rbindlist(replicate(n_synth, rows_na, simplify = FALSE))
       x_synth[, idx := rep(indices_sampled, each = n_synth)]
-      x_synth <- rbind(x_synth, rows_na)
+      x_synth <- rbind(x_synth, rows_na, fill = T)
       setorder(x_synth, idx)[, idx :=  NULL]
       x_synth <- post_x(x_synth, params)
     }
     x_synth
+  }
+  if (isTRUE(parallel)) {
+    x_synth_ <- foreach(step = 1:step_no, .combine = "rbind") %dopar% par_fun(step)
+  } else {
+    x_synth_ <- foreach(step = 1:step_no, .combine = "rbind") %do% par_fun(step)
   }
   
   return(x_synth_)
