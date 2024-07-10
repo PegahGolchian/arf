@@ -8,6 +8,7 @@ cforde(
   params,
   evidence,
   row_mode = c("separate", "or"),
+  nomatch = c("force_warning", "force", "na_warning", "na"),
   stepsize = 0,
   parallel = TRUE
 )
@@ -19,10 +20,15 @@ cforde(
 
 \item{row_mode}{Interpretation of rows in multi-row conditions.}
 
+\item{nomatch}{What to do if no leaf matches a condition in \code{evidence}?
+Options are to force sampling from a random leaf, either with a warning (\code{"force_warning"})
+or without a warning (\code{"force"}), or to return \code{NA}, also with a warning
+(\code{"na_warning"}) or without a warning (\code{"na"}). The default is \code{"force_warning"}.}
+
 \item{stepsize}{Stepsize defining number of condition rows handled in one for each step.}
 
 \item{parallel}{Compute in parallel? Must register backend beforehand, e.g.
-via \code{doParallel}.}
+via \code{doParallel} or \code{doFuture}; see examples.}
 }
 \value{
 List with conditions (\code{evidence_input}), prepared conditions (\code{evidence_prepped})

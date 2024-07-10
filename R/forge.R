@@ -11,11 +11,16 @@
 #' @param evidence_row_mode Interpretation of rows in multi-row evidence. If \code{'separate'},
 #'   each row in \code{evidence} is a separate conditioning event for which \code{n_synth} synthetic samples
 #'   are generated. If \code{'or'}, the rows are combined with a logical or; see Examples.
+#' @param round Round continuous variables to their respective maximum precision in the real data set?
 #' @param sample_NAs Sample NAs respecting the probability for missing values in the original data.
+#' @param nomatch What to do if no leaf matches a condition in \code{evidence}?
+#'   Options are to force sampling from a random leaf, either with a warning (\code{"force_warning"})
+#'   or without a warning (\code{"force"}), or to return \code{NA}, also with a warning 
+#'   (\code{"na_warning"}) or without a warning (\code{"na"}). The default is \code{"force_warning"}.
 #' @param stepsize Stepsize defining number of evidence rows handled in one for each step.
 #'   Defaults to nrow(evidence)/num_registered_workers for \code{parallel == TRUE}.
 #' @param parallel Compute in parallel? Must register backend beforehand, e.g. 
-#'   via \code{doParallel}.
+#'   via \code{doParallel} or \code{doFuture}; see examples.
 #' @param n_synth Number of synthetic samples to generate.
 #'
 #' @details  
@@ -83,6 +88,15 @@
 #' n_leaves <- nrow(psi$forest)
 #' evi <- data.frame(f_idx = psi$forest$f_idx, wt = rexp(n_leaves))
 #' x_synth <- forge(psi, n_synth = 100, evidence = evi)
+#' 
+#' \dontrun{
+#' # Parallelization with doParallel
+#' doParallel::registerDoParallel(cores = 4)
+#'
+#' # ... or with doFuture
+#' doFuture::registerDoFuture()
+#' future::plan("multisession", workers = 4)
+#' }
 #'
 #' @seealso
 #' \code{\link{arf}}, \code{\link{adversarial_rf}}, \code{\link{forde}}, \code{\link{expct}}, \code{\link{lik}}
@@ -99,12 +113,15 @@ forge <- function(
     n_synth, #TODO: maybe I should take another parameter when I use multiple.. Might be confusing for the users if the same parameter is used differently.
     evidence = NULL,
     evidence_row_mode = c("separate", "or"), #	Stilbruch, default nicht in Beschreibung, keine examples wie versprochen in der Doku
+    round = TRUE,
     sample_NAs = FALSE,
+    nomatch = c("force_warning", "force", "na_warning", "na"),
     stepsize = 0,
     parallel = TRUE,
     multiple = "no") {
   
   evidence_row_mode <- match.arg(evidence_row_mode)
+  nomatch <- match.arg(nomatch)
   
   # To avoid data.table check issues
   tree <- cvg <- leaf <- idx <- family <- mu <- med <- sigma <- prob <- dat <- 
@@ -152,7 +169,7 @@ forge <- function(
       index_start <- (step_-1)*stepsize + 1
       index_end <- min(step_*stepsize, nrow(evidence))
       evidence_part <- evidence[index_start:index_end,]
-      cparams <- cforde(params, evidence_part, evidence_row_mode, stepsize_cforde, parallel_cforde)
+      cparams <- cforde(params, evidence_part, evidence_row_mode, nomatch, stepsize_cforde, parallel_cforde)
       if (is.null(cparams)) {
         n_synth <- n_synth * nrow(evidence_part)
       }
@@ -174,15 +191,6 @@ forge <- function(
       omega <- cparams$forest[, .(c_idx, f_idx, f_idx_uncond, wt = cvg)]
     } 
     omega <- omega[wt > 0, ]
-    
-    # Use random leaves if NA (no matching leaves found)
-    if (omega[, any(is.na(f_idx))] & omega[, any(!is.na(f_idx))]) {
-      row_idx <- sample(nrow(omega[!is.na(f_idx), ]), omega[, sum(is.na(f_idx))], replace = TRUE)
-      temp <- omega[!is.na(f_idx), ][row_idx, .(f_idx, f_idx_uncond)]
-      omega[is.na(f_idx), f_idx_uncond := temp[, f_idx_uncond]]
-      omega[is.na(f_idx), f_idx := temp[, f_idx]]
-    }
-    
     
     # For each synthetic sample and condition, draw a leaf according to the leaf weights
     if (nrow(omega) == 1) {
@@ -285,7 +293,7 @@ forge <- function(
     }
     
     # Clean up, export
-    x_synth <- post_x(x_synth, params)
+    x_synth <- post_x(x_synth, params, round)
     
     if (sample_NAs) {
       setDT(x_synth)
@@ -297,7 +305,7 @@ forge <- function(
       setorder(NA_share[,variable := factor(variable, levels = params$meta[,variable])], variable, idx)
       NA_share[,dat := rbinom(.N, 1, prob = NA_share)]
       x_synth[dcast(NA_share,formula =  idx ~ variable, value.var = "dat")[,-"idx"] == 1] <- NA
-      x_synth <- post_x(x_synth, params)
+      x_synth <- post_x(x_synth, params, round)
     }
     
     if (evidence_row_mode == "separate" & any(omega[, is.na(f_idx)])) {
@@ -314,7 +322,7 @@ forge <- function(
       x_synth[, idx := rep(indices_sampled, each = n_synth)]
       x_synth <- rbind(x_synth, rows_na, fill = T)
       setorder(x_synth, idx)[, idx :=  NULL]
-      x_synth <- post_x(x_synth, params)
+      x_synth <- post_x(x_synth, params, round)
     }
     x_synth
   }

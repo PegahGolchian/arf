@@ -9,6 +9,8 @@ expct(
   query = NULL,
   evidence = NULL,
   evidence_row_mode = c("separate", "or"),
+  round = FALSE,
+  nomatch = c("force_warning", "force", "na_warning", "na"),
   stepsize = 0,
   parallel = TRUE
 )
@@ -31,11 +33,18 @@ see Details and Examples.}
 each row in \code{evidence} is a separate conditioning event for which \code{n_synth} synthetic samples
 are generated. If \code{'or'}, the rows are combined with a logical or; see Examples.}
 
+\item{round}{Round continuous variables to their respective maximum precision in the real data set?}
+
+\item{nomatch}{What to do if no leaf matches a condition in \code{evidence}?
+Options are to force sampling from a random leaf, either with a warning (\code{"force_warning"})
+or without a warning (\code{"force"}), or to return \code{NA}, also with a warning
+(\code{"na_warning"}) or without a warning (\code{"na"}). The default is \code{"force_warning"}.}
+
 \item{stepsize}{Stepsize defining number of evidence rows handled in one for each step.
 Defaults to nrow(evidence)/num_registered_workers for \code{parallel == TRUE}.}
 
 \item{parallel}{Compute in parallel? Must register backend beforehand, e.g.
-via \code{doParallel}.}
+via \code{doParallel} or \code{doFuture}; see examples.}
 }
 \value{
 A one row data frame with values for all query variables.
@@ -80,6 +89,15 @@ evi[1, 1] <- NA_real_
 evi[1, 5] <- NA_character_
 evi[2, 2] <- NA_real_
 x_synth <- expct(psi, evidence = evi)
+
+\dontrun{
+# Parallelization with doParallel
+doParallel::registerDoParallel(cores = 4)
+
+# ... or with doFuture
+doFuture::registerDoFuture()
+future::plan("multisession", workers = 4)
+}
 
 }
 \references{

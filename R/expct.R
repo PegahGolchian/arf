@@ -16,10 +16,15 @@
 #' @param evidence_row_mode Interpretation of rows in multi-row evidence. If \code{'separate'},
 #'   each row in \code{evidence} is a separate conditioning event for which \code{n_synth} synthetic samples
 #'   are generated. If \code{'or'}, the rows are combined with a logical or; see Examples.
+#' @param round Round continuous variables to their respective maximum precision in the real data set?
+#' @param nomatch What to do if no leaf matches a condition in \code{evidence}?
+#'   Options are to force sampling from a random leaf, either with a warning (\code{"force_warning"})
+#'   or without a warning (\code{"force"}), or to return \code{NA}, also with a warning 
+#'   (\code{"na_warning"}) or without a warning (\code{"na"}). The default is \code{"force_warning"}.
 #' @param stepsize Stepsize defining number of evidence rows handled in one for each step.
 #'   Defaults to nrow(evidence)/num_registered_workers for \code{parallel == TRUE}.
 #' @param parallel Compute in parallel? Must register backend beforehand, e.g. 
-#'   via \code{doParallel}.
+#'   via \code{doParallel} or \code{doFuture}; see examples.
 #'   
 #' @details 
 #' This function computes expected values for any subset of features, optionally 
@@ -69,6 +74,15 @@
 #' evi[2, 2] <- NA_real_
 #' x_synth <- expct(psi, evidence = evi)
 #' 
+#' \dontrun{
+#' # Parallelization with doParallel
+#' doParallel::registerDoParallel(cores = 4)
+#'
+#' # ... or with doFuture
+#' doFuture::registerDoFuture()
+#' future::plan("multisession", workers = 4)
+#' }
+#' 
 #' @seealso
 #' \code{\link{arf}}, \code{\link{adversarial_rf}}, \code{\link{forde}}, \code{\link{forge}}, \code{\link{lik}}
 #' 
@@ -83,10 +97,13 @@ expct <- function(
     query = NULL, 
     evidence = NULL,
     evidence_row_mode = c("separate", "or"),
+    round = FALSE,
+    nomatch = c("force_warning", "force", "na_warning", "na"),
     stepsize = 0,
     parallel = TRUE) {
   
   evidence_row_mode <- match.arg(evidence_row_mode)
+  nomatch <- match.arg(nomatch)
   
   # To avoid data.table check issues
   variable <- tree <- f_idx <- cvg <- wt <- V1 <- value <- val <- family <-
@@ -147,7 +164,7 @@ expct <- function(
       index_start <- (step_-1)*stepsize + 1
       index_end <- min(step_*stepsize, nrow(evidence))
       evidence_part <- evidence[index_start:index_end,]
-      cparams <- cforde(params, evidence_part, evidence_row_mode, stepsize_cforde, parallel_cforde)
+      cparams <- cforde(params, evidence_part, evidence_row_mode, nomatch, stepsize_cforde, parallel_cforde)
     } 
     
     # omega contains the weight (wt) for each leaf (f_idx) for each condition (c_idx)
@@ -215,7 +232,7 @@ expct <- function(
     
     # Create dataset with expectations
     x_synth <- cbind(synth_cnt, synth_cat)
-    x_synth <- post_x(x_synth, params)
+    x_synth <- post_x(x_synth, params, round)
     
     x_synth
   }
@@ -227,5 +244,3 @@ expct <- function(
   
   return(x_synth_)
 }
-
-

@@ -9,7 +9,9 @@ forge(
   n_synth,
   evidence = NULL,
   evidence_row_mode = c("separate", "or"),
+  round = TRUE,
   sample_NAs = FALSE,
+  nomatch = c("force_warning", "force", "na_warning", "na"),
   stepsize = 0,
   parallel = TRUE
 )
@@ -29,13 +31,20 @@ see Details and Examples.}
 each row in \code{evidence} is a separate conditioning event for which \code{n_synth} synthetic samples
 are generated. If \code{'or'}, the rows are combined with a logical or; see Examples.}
 
+\item{round}{Round continuous variables to their respective maximum precision in the real data set?}
+
 \item{sample_NAs}{Sample NAs respecting the probability for missing values in the original data.}
+
+\item{nomatch}{What to do if no leaf matches a condition in \code{evidence}?
+Options are to force sampling from a random leaf, either with a warning (\code{"force_warning"})
+or without a warning (\code{"force"}), or to return \code{NA}, also with a warning
+(\code{"na_warning"}) or without a warning (\code{"na"}). The default is \code{"force_warning"}.}
 
 \item{stepsize}{Stepsize defining number of evidence rows handled in one for each step.
 Defaults to nrow(evidence)/num_registered_workers for \code{parallel == TRUE}.}
 
 \item{parallel}{Compute in parallel? Must register backend beforehand, e.g.
-via \code{doParallel}.}
+via \code{doParallel} or \code{doFuture}; see examples.}
 }
 \value{
 A dataset of \code{n_synth} synthetic samples.
@@ -97,6 +106,15 @@ x_synth <- forge(psi, n_synth = 1, evidence = evi)
 n_leaves <- nrow(psi$forest)
 evi <- data.frame(f_idx = psi$forest$f_idx, wt = rexp(n_leaves))
 x_synth <- forge(psi, n_synth = 100, evidence = evi)
+
+\dontrun{
+# Parallelization with doParallel
+doParallel::registerDoParallel(cores = 4)
+
+# ... or with doFuture
+doFuture::registerDoFuture()
+future::plan("multisession", workers = 4)
+}
 
 }
 \references{
